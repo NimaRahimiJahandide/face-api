@@ -17,17 +17,23 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Load face-api models
+  // Load face-api models from CDN
   useEffect(() => {
     const loadModels = async () => {
       try {
-        await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
-        await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
-        await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
+        const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model';
+        
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+        ]);
+        
+        console.log('Face-api models loaded successfully');
         setIsLoading(false);
       } catch (err) {
         console.error('Error loading models:', err);
-        setError('Failed to load face detection models');
+        setError('Failed to load face detection models. Please check your internet connection.');
         setIsLoading(false);
       }
     };
@@ -40,7 +46,11 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
     const initCamera = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480 }
+          video: { 
+            width: { ideal: 640 }, 
+            height: { ideal: 480 },
+            facingMode: 'user'
+          }
         });
         
         if (videoRef.current) {
@@ -49,7 +59,7 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
         }
       } catch (err) {
         console.error('Error accessing camera:', err);
-        setError('Failed to access camera');
+        setError('Failed to access camera. Please allow camera permissions.');
       }
     };
 
@@ -85,10 +95,16 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
       // Draw video frame to canvas
       context.drawImage(video, 0, 0);
 
-      // Detect face
-      const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
-        .withFaceLandmarks()
-        .withFaceDescriptors();
+      // Detect face with better options
+      const detections = await faceapi.detectAllFaces(
+        video, 
+        new faceapi.TinyFaceDetectorOptions({ 
+          inputSize: 416, 
+          scoreThreshold: 0.5 
+        })
+      )
+      .withFaceLandmarks()
+      .withFaceDescriptors();
 
       if (detections.length === 0) {
         setError('No face detected. Please position your face clearly in front of the camera.');
@@ -132,7 +148,7 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
       setError(null);
     } catch (err) {
       console.error('Error capturing image:', err);
-      setError('Failed to capture image');
+      setError('Failed to capture image. Please try again.');
     }
     
     setIsProcessing(false);
@@ -171,7 +187,23 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
   if (isLoading) {
     return (
       <div style={{ textAlign: 'center', padding: '20px' }}>
-        <p>Loading face detection models...</p>
+        <h2>Loading Face Detection...</h2>
+        <p>Please wait while we load the face detection models...</p>
+        <div style={{ 
+          width: '50px', 
+          height: '50px', 
+          border: '3px solid #f3f3f3',
+          borderTop: '3px solid #007bff',
+          borderRadius: '50%',
+          animation: 'spin 2s linear infinite',
+          margin: '20px auto'
+        }}></div>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
@@ -205,6 +237,7 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
             maxWidth: '400px',
             border: '2px solid #ddd',
             borderRadius: '8px',
+            transform: 'scaleX(-1)', // Mirror effect
           }}
         />
         
@@ -220,7 +253,8 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
           marginBottom: '20px',
           padding: '10px',
           backgroundColor: '#ffebee',
-          borderRadius: '4px'
+          borderRadius: '4px',
+          border: '1px solid #ffcdd2'
         }}>
           {error}
         </div>
@@ -238,6 +272,7 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
             border: 'none',
             borderRadius: '4px',
             cursor: isProcessing ? 'not-allowed' : 'pointer',
+            transition: 'background-color 0.3s',
           }}
         >
           {isProcessing ? 'Processing...' : 'Capture'}
@@ -245,6 +280,32 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
       </div>
 
       <div style={{ marginTop: '20px' }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          gap: '10px',
+          marginBottom: '10px'
+        }}>
+          {[1, 2, 3].map((step) => (
+            <div
+              key={step}
+              style={{
+                width: '30px',
+                height: '30px',
+                borderRadius: '50%',
+                backgroundColor: step <= capturedImages.length ? '#007bff' : '#ddd',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '12px',
+                fontWeight: 'bold'
+              }}
+            >
+              {step}
+            </div>
+          ))}
+        </div>
         <p style={{ fontSize: '14px', color: '#666' }}>
           Images captured: {capturedImages.length}/3
         </p>
