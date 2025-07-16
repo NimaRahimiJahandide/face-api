@@ -16,33 +16,48 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
   const [error, setError] = useState<string | null>(null);
   const [currentDirection, setCurrentDirection] = useState<FaceDirection | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [stabilityCount, setStabilityCount] = useState(0);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
   const lastCaptureTimeRef = useRef<number>(0);
   const stableDirectionCountRef = useRef<number>(0);
   const lastDirectionRef = useRef<FaceDirection | null>(null);
+  const consecutiveDetectionsRef = useRef<FaceDirection[]>([]);
 
   useEffect(() => {
     const loadModels = async () => {
       try {
-        const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model';
+        // Use the correct model path for face-api.js
+        const MODEL_URL = '/models';
         
+        // Load only the models we need
         await Promise.all([
           faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
           faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
         ]);
         
         console.log('Face-api models loaded successfully');
         setIsLoading(false);
       } catch (err) {
         console.error('Error loading models:', err);
-        setError('Failed to load face detection models. Please check your internet connection.');
-        setIsLoading(false);
+        // Fallback to CDN
+        try {
+          const CDN_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model';
+          await Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri(CDN_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(CDN_URL),
+          ]);
+          console.log('Face-api models loaded from CDN');
+          setIsLoading(false);
+        } catch (cdnErr) {
+          console.error('Error loading models from CDN:', cdnErr);
+          setError('Failed to load face detection models. Please refresh the page.');
+          setIsLoading(false);
+        }
       }
     };
 
@@ -79,9 +94,9 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
       }
-      if (detectionIntervalRef.current) {
-        clearInterval(detectionIntervalRef.current);
-        detectionIntervalRef.current = null;
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
       }
     };
   }, [isLoading]);
@@ -89,51 +104,71 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
   const determineFaceDirection = (landmarks: faceapi.FaceLandmarks68): FaceDirection => {
     const points = landmarks.positions;
     
-    // Key facial landmarks for direction detection
-    const noseTip = points[30];        // Nose tip
-    const leftEye = points[36];        // Left eye outer corner
-    const rightEye = points[45];       // Right eye outer corner
-    const leftMouth = points[48];      // Left mouth corner
-    const rightMouth = points[54];     // Right mouth corner
-    const chinCenter = points[8];      // Chin center
+    // More precise landmark points for direction detection
+    const noseTip = points[30];           // Nose tip
+    const leftEyeOuter = points[36];      // Left eye outer corner
+    const rightEyeOuter = points[45];     // Right eye outer corner
+    const leftEyeInner = points[39];      // Left eye inner corner
+    const rightEyeInner = points[42];     // Right eye inner corner
+    const leftMouthCorner = points[48];   // Left mouth corner
+    const rightMouthCorner = points[54];  // Right mouth corner
     
-    // Calculate face center
-    const faceCenter = {
-      x: (leftEye.x + rightEye.x) / 2,
-      y: (leftEye.y + rightEye.y) / 2
+    // Calculate eye centers
+    const leftEyeCenter = {
+      x: (leftEyeOuter.x + leftEyeInner.x) / 2,
+      y: (leftEyeOuter.y + leftEyeInner.y) / 2
     };
     
-    // Calculate nose offset from face center
-    const noseOffsetX = noseTip.x - faceCenter.x;
+    const rightEyeCenter = {
+      x: (rightEyeOuter.x + rightEyeInner.x) / 2,
+      y: (rightEyeOuter.y + rightEyeInner.y) / 2
+    };
     
-    // Calculate eye distance to determine face width
-    const eyeDistance = Math.abs(rightEye.x - leftEye.x);
+    // Calculate face center line
+    const faceCenterX = (leftEyeCenter.x + rightEyeCenter.x) / 2;
+    const eyeDistance = Math.abs(rightEyeCenter.x - leftEyeCenter.x);
     
-    // Calculate mouth corners visibility
-    const mouthWidth = Math.abs(rightMouth.x - leftMouth.x);
+    // Calculate nose deviation from center
+    const noseDeviation = (noseTip.x - faceCenterX) / eyeDistance;
     
-    // Normalized nose offset (relative to eye distance)
-    const normalizedNoseOffset = noseOffsetX / eyeDistance;
+    // Calculate mouth asymmetry
+    const mouthCenterX = (leftMouthCorner.x + rightMouthCorner.x) / 2;
+    const mouthDeviation = (mouthCenterX - faceCenterX) / eyeDistance;
     
-    // Calculate asymmetry in facial features
-    const leftSideVisible = Math.abs(leftEye.x - leftMouth.x);
-    const rightSideVisible = Math.abs(rightEye.x - rightMouth.x);
-    const sideAsymmetry = (rightSideVisible - leftSideVisible) / eyeDistance;
+    // Calculate eye visibility ratio
+    const leftEyeWidth = Math.abs(leftEyeOuter.x - leftEyeInner.x);
+    const rightEyeWidth = Math.abs(rightEyeOuter.x - rightEyeInner.x);
+    const eyeRatio = leftEyeWidth / rightEyeWidth;
     
-    // Thresholds for direction detection
-    const FRONT_THRESHOLD = 0.15;
-    const PROFILE_THRESHOLD = 0.25;
+    // Improved thresholds based on multiple features
+    const FRONT_THRESHOLD = 0.1;
+    const PROFILE_THRESHOLD = 0.2;
     
-    // Direction determination logic
-    if (Math.abs(normalizedNoseOffset) < FRONT_THRESHOLD && Math.abs(sideAsymmetry) < 0.1) {
+    // Direction determination with multiple criteria
+    const avgDeviation = (noseDeviation + mouthDeviation) / 2;
+    
+    if (Math.abs(avgDeviation) < FRONT_THRESHOLD && eyeRatio > 0.8 && eyeRatio < 1.25) {
       return 'front';
-    } else if (normalizedNoseOffset > PROFILE_THRESHOLD || sideAsymmetry > 0.15) {
-      return 'right'; // Face turned to their right (our left)
-    } else if (normalizedNoseOffset < -PROFILE_THRESHOLD || sideAsymmetry < -0.15) {
-      return 'left'; // Face turned to their left (our right)
+    } else if (avgDeviation > PROFILE_THRESHOLD || eyeRatio > 1.4) {
+      return 'right'; // Face turned right (our left when mirrored)
+    } else if (avgDeviation < -PROFILE_THRESHOLD || eyeRatio < 0.6) {
+      return 'left'; // Face turned left (our right when mirrored)
     }
     
-    return 'front'; // Default to front if uncertain
+    return 'front'; // Default to front
+  };
+
+  const updateStabilityCount = (direction: FaceDirection) => {
+    // Track last 10 detections
+    consecutiveDetectionsRef.current.push(direction);
+    if (consecutiveDetectionsRef.current.length > 10) {
+      consecutiveDetectionsRef.current.shift();
+    }
+    
+    // Count how many of the last detections match the current direction
+    const matchingDetections = consecutiveDetectionsRef.current.filter(d => d === direction).length;
+    stableDirectionCountRef.current = matchingDetections;
+    setStabilityCount(matchingDetections);
   };
 
   const captureImage = async (direction: FaceDirection) => {
@@ -152,7 +187,13 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
 
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
+      
+      // Draw the mirrored video frame
+      context.save();
+      context.scale(-1, 1);
+      context.translate(-canvas.width, 0);
       context.drawImage(video, 0, 0);
+      context.restore();
 
       const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
       
@@ -183,10 +224,13 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
         onComplete(updatedImages);
       }
 
-      // Reset stability counter
+      // Reset counters
       stableDirectionCountRef.current = 0;
+      consecutiveDetectionsRef.current = [];
       lastCaptureTimeRef.current = Date.now();
       setError(null);
+      setStabilityCount(0);
+      
     } catch (err) {
       console.error('Error capturing image:', err);
       setError('Failed to capture image. Please try again.');
@@ -195,162 +239,167 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
     setIsCapturing(false);
   };
 
-  useEffect(() => {
-    const startDetection = () => {
-      if (!videoRef.current || !overlayCanvasRef.current) return;
-
-      const video = videoRef.current;
-      const overlayCanvas = overlayCanvasRef.current;
-      const overlayCtx = overlayCanvas.getContext('2d');
-
-      if (!overlayCtx) return;
-
-      const detectFaces = async () => {
-        if (video.readyState === 4 && !isCapturing) {
-          const rect = video.getBoundingClientRect();
-          overlayCanvas.width = video.videoWidth;
-          overlayCanvas.height = video.videoHeight;
-          overlayCanvas.style.width = `${rect.width}px`;
-          overlayCanvas.style.height = `${rect.height}px`;
-
-          overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-
-          try {
-            const detections = await faceapi.detectAllFaces(
-              video, 
-              new faceapi.TinyFaceDetectorOptions({ 
-                inputSize: 416, 
-                scoreThreshold: 0.5 
-              })
-            ).withFaceLandmarks();
-
-            overlayCtx.save();
-            overlayCtx.scale(-1, 1);
-            overlayCtx.translate(-overlayCanvas.width, 0);
-
-            if (detections.length === 1) {
-              const detection = detections[0];
-              const { x, y, width, height } = detection.detection.box;
-              
-              // Determine face direction
-              const direction = determineFaceDirection(detection.landmarks);
-              setCurrentDirection(direction);
-              
-              // Check if this is the direction we're looking for
-              const targetDirection = currentStep === 'center' ? 'front' : 
-                                    currentStep === 'right' ? 'right' : 'left';
-              
-              const isCorrectDirection = direction === targetDirection;
-              
-              // Stability check - only capture if direction is stable
-              if (direction === lastDirectionRef.current) {
-                stableDirectionCountRef.current++;
-              } else {
-                stableDirectionCountRef.current = 0;
-                lastDirectionRef.current = direction;
-              }
-              
-              // Auto-capture logic
-              const now = Date.now();
-              const timeSinceLastCapture = now - lastCaptureTimeRef.current;
-              const isStable = stableDirectionCountRef.current >= 10; // 10 consecutive detections
-              const cooldownPassed = timeSinceLastCapture > 2000; // 2 second cooldown
-              
-              if (isCorrectDirection && isStable && cooldownPassed && currentStep !== 'complete') {
-                captureImage(direction);
-              }
-              
-              // Draw face box with color based on correctness
-              overlayCtx.strokeStyle = isCorrectDirection && isStable ? '#00ff00' : '#ff9900';
-              overlayCtx.lineWidth = 3;
-              overlayCtx.strokeRect(x, y, width, height);
-              
-              // Draw confidence and direction
-              overlayCtx.fillStyle = isCorrectDirection && isStable ? '#00ff00' : '#ff9900';
-              overlayCtx.font = '16px Arial';
-              overlayCtx.fillText(
-                `${Math.round(detection.detection.score * 100)}% - ${direction}`,
-                x,
-                y - 10
-              );
-              
-              // Draw landmarks
-              overlayCtx.fillStyle = '#ffff00';
-              detection.landmarks.positions.forEach((point) => {
-                overlayCtx.fillRect(point.x - 1, point.y - 1, 2, 2);
-              });
-              
-            } else {
-              // Reset stability when no single face is detected
-              stableDirectionCountRef.current = 0;
-              lastDirectionRef.current = null;
-              setCurrentDirection(null);
-            }
-
-            overlayCtx.restore();
-            
-            // Status text
-            overlayCtx.fillStyle = '#ffffff';
-            overlayCtx.font = 'bold 18px Arial';
-            overlayCtx.strokeStyle = '#000000';
-            overlayCtx.lineWidth = 2;
-            
-            let statusText = '';
-            if (detections.length === 0) {
-              statusText = 'No face detected';
-              overlayCtx.fillStyle = '#ff0000';
-            } else if (detections.length === 1) {
-              const targetDirection = currentStep === 'center' ? 'front' : 
-                                    currentStep === 'right' ? 'right' : 'left';
-              const isCorrect = currentDirection === targetDirection;
-              const isStable = stableDirectionCountRef.current >= 10;
-              
-              if (isCorrect && isStable) {
-                statusText = 'Perfect! Capturing...';
-                overlayCtx.fillStyle = '#00ff00';
-              } else if (isCorrect) {
-                statusText = `Good! Hold steady... (${stableDirectionCountRef.current}/10)`;
-                overlayCtx.fillStyle = '#ff9900';
-              } else {
-                statusText = `Turn ${targetDirection === 'front' ? 'forward' : targetDirection}`;
-                overlayCtx.fillStyle = '#ff9900';
-              }
-            } else {
-              statusText = 'Multiple faces detected';
-              overlayCtx.fillStyle = '#ff0000';
-            }
-            
-            overlayCtx.strokeText(statusText, 10, 30);
-            overlayCtx.fillText(statusText, 10, 30);
-
-          } catch (err) {
-            console.error('Detection error:', err);
-            overlayCtx.restore();
-          }
-        }
-      };
-
-      if (detectionIntervalRef.current) {
-        clearInterval(detectionIntervalRef.current);
-      }
-
-      detectionIntervalRef.current = setInterval(detectFaces, 100);
-    };
+  const detectFaces = async () => {
+    if (!videoRef.current || !overlayCanvasRef.current || isCapturing) {
+      animationFrameRef.current = requestAnimationFrame(detectFaces);
+      return;
+    }
 
     const video = videoRef.current;
-    if (video && !isLoading) {
-      video.addEventListener('loadedmetadata', startDetection);
-      video.addEventListener('play', startDetection);
+    const overlayCanvas = overlayCanvasRef.current;
+    const overlayCtx = overlayCanvas.getContext('2d');
+
+    if (!overlayCtx || video.readyState !== 4) {
+      animationFrameRef.current = requestAnimationFrame(detectFaces);
+      return;
+    }
+
+    // Update canvas size to match video
+    const videoRect = video.getBoundingClientRect();
+    overlayCanvas.width = video.videoWidth;
+    overlayCanvas.height = video.videoHeight;
+    overlayCanvas.style.width = `${videoRect.width}px`;
+    overlayCanvas.style.height = `${videoRect.height}px`;
+
+    // Clear previous drawings
+    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+    try {
+      const detections = await faceapi.detectAllFaces(
+        video, 
+        new faceapi.TinyFaceDetectorOptions({ 
+          inputSize: 416, 
+          scoreThreshold: 0.5 
+        })
+      ).withFaceLandmarks();
+
+      // Apply mirroring to match video display
+      overlayCtx.save();
+      overlayCtx.scale(-1, 1);
+      overlayCtx.translate(-overlayCanvas.width, 0);
+
+      if (detections.length === 1) {
+        const detection = detections[0];
+        const { x, y, width, height } = detection.detection.box;
+        
+        // Determine face direction
+        const direction = determineFaceDirection(detection.landmarks);
+        setCurrentDirection(direction);
+        updateStabilityCount(direction);
+        
+        // Check if this is the direction we're looking for
+        const targetDirection = currentStep === 'center' ? 'front' : 
+                              currentStep === 'right' ? 'right' : 'left';
+        
+        const isCorrectDirection = direction === targetDirection;
+        const isStable = stableDirectionCountRef.current >= 8; // 8 out of 10 detections
+        
+        // Auto-capture logic
+        const now = Date.now();
+        const timeSinceLastCapture = now - lastCaptureTimeRef.current;
+        const cooldownPassed = timeSinceLastCapture > 1500; // 1.5 second cooldown
+        
+        if (isCorrectDirection && isStable && cooldownPassed && currentStep !== 'complete') {
+          captureImage(direction);
+        }
+        
+        // Draw face bounding box
+        overlayCtx.strokeStyle = isCorrectDirection && isStable ? '#00ff00' : '#ff9900';
+        overlayCtx.lineWidth = 3;
+        overlayCtx.strokeRect(x, y, width, height);
+        
+        // Draw confidence and direction info
+        overlayCtx.fillStyle = isCorrectDirection && isStable ? '#00ff00' : '#ff9900';
+        overlayCtx.font = 'bold 16px Arial';
+        overlayCtx.strokeStyle = '#000000';
+        overlayCtx.lineWidth = 3;
+        overlayCtx.strokeText(`${Math.round(detection.detection.score * 100)}% - ${direction}`, x, y - 10);
+        overlayCtx.fillText(`${Math.round(detection.detection.score * 100)}% - ${direction}`, x, y - 10);
+        
+        // Draw key landmarks
+        overlayCtx.fillStyle = '#ffff00';
+        const keyPoints = [30, 36, 45, 39, 42, 48, 54]; // nose, eyes, mouth corners
+        keyPoints.forEach(pointIndex => {
+          const point = detection.landmarks.positions[pointIndex];
+          overlayCtx.fillRect(point.x - 2, point.y - 2, 4, 4);
+        });
+        
+      } else {
+        // Reset stability when no single face is detected
+        stableDirectionCountRef.current = 0;
+        consecutiveDetectionsRef.current = [];
+        setCurrentDirection(null);
+        setStabilityCount(0);
+      }
+
+      overlayCtx.restore();
+      
+      // Draw status text
+      overlayCtx.fillStyle = '#ffffff';
+      overlayCtx.font = 'bold 18px Arial';
+      overlayCtx.strokeStyle = '#000000';
+      overlayCtx.lineWidth = 2;
+      
+      let statusText = '';
+      if (detections.length === 0) {
+        statusText = 'No face detected';
+        overlayCtx.fillStyle = '#ff0000';
+      } else if (detections.length === 1) {
+        const targetDirection = currentStep === 'center' ? 'front' : 
+                              currentStep === 'right' ? 'right' : 'left';
+        const isCorrect = currentDirection === targetDirection;
+        const isStable = stableDirectionCountRef.current >= 8;
+        
+        if (isCorrect && isStable) {
+          statusText = 'Perfect! Capturing...';
+          overlayCtx.fillStyle = '#00ff00';
+        } else if (isCorrect) {
+          statusText = `Good! Hold steady... (${stableDirectionCountRef.current}/10)`;
+          overlayCtx.fillStyle = '#ff9900';
+        } else {
+          statusText = `Turn ${targetDirection === 'front' ? 'forward' : targetDirection}`;
+          overlayCtx.fillStyle = '#ff9900';
+        }
+      } else {
+        statusText = 'Multiple faces detected - show only one face';
+        overlayCtx.fillStyle = '#ff0000';
+      }
+      
+      overlayCtx.strokeText(statusText, 10, 30);
+      overlayCtx.fillText(statusText, 10, 30);
+
+    } catch (err) {
+      console.error('Detection error:', err);
+      overlayCtx.restore();
+    }
+
+    // Continue detection loop
+    animationFrameRef.current = requestAnimationFrame(detectFaces);
+  };
+
+  useEffect(() => {
+    if (!isLoading && videoRef.current && currentStep !== 'complete') {
+      const video = videoRef.current;
+      
+      const handleVideoReady = () => {
+        if (animationFrameRef.current) {
+          cancelAnimationFrame(animationFrameRef.current);
+        }
+        animationFrameRef.current = requestAnimationFrame(detectFaces);
+      };
+
+      video.addEventListener('loadedmetadata', handleVideoReady);
+      video.addEventListener('play', handleVideoReady);
       
       return () => {
-        video.removeEventListener('loadedmetadata', startDetection);
-        video.removeEventListener('play', startDetection);
-        if (detectionIntervalRef.current) {
-          clearInterval(detectionIntervalRef.current);
+        video.removeEventListener('loadedmetadata', handleVideoReady);
+        video.removeEventListener('play', handleVideoReady);
+        if (animationFrameRef.current) {
+          cancelAnimationFrame(animationFrameRef.current);
         }
       };
     }
-  }, [isLoading, currentStep, capturedImages, isCapturing, currentDirection]);
+  }, [isLoading, currentStep, currentDirection]);
 
   const getInstructionText = () => {
     switch (currentStep) {
@@ -441,7 +490,10 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
           Current direction: {currentDirection || 'Unknown'}
         </p>
         <p className={styles.StatusText}>
-          Stability: {stableDirectionCountRef.current}/10
+          Stability: {stabilityCount}/10
+        </p>
+        <p className={styles.StatusText}>
+          Target: {currentStep === 'center' ? 'front' : currentStep}
         </p>
       </div>
 
