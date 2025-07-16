@@ -3,28 +3,30 @@ import { useEffect, useState } from 'react';
 import InstructionsPage from '@/components/InstructionsPage';
 import CapturePage from '@/components/CapturePage';
 import PreviewPage from '@/components/PreviewPage';
+import type { CapturedImage } from '@/types';
 
-const Home: React.FC = () => {
-  const [currentPage, setCurrentPage]: [PageState, SetPageState] = useState<PageState>('instructions');
-  const [capturedImages, setCapturedImages]: [CapturedImage[], SetCapturedImages] = useState<CapturedImage[]>([]);
+const Home = () => {
+  const [currentPage, setCurrentPage] = useState<'instructions' | 'capture' | 'preview'>('instructions');
+  const [capturedImages, setCapturedImages] = useState<CapturedImage[]>([]);
 
-  useEffect((): void => {
+  useEffect(() => {
     if (window.Telegram && window.Telegram.WebApp) {
       window.Telegram.WebApp.ready();
       window.Telegram.WebApp.expand();
     }
   }, []);
 
-  const handleStartCapture: StartCaptureHandler = (): void => {
+  const handleStartCapture = () => {
     setCurrentPage('capture');
   };
 
-  const handleCaptureComplete: CaptureCompleteHandler = (images: CapturedImage[]): void => {
+  const handleCaptureComplete = (images: CapturedImage[]) => {
     setCapturedImages(images);
     setCurrentPage('preview');
   };
 
-  const handleNext: NextHandler = (): void => {
+  const handleNext = () => {
+    // Reset to initial state
     setCurrentPage('instructions');
     setCapturedImages([]);
   };

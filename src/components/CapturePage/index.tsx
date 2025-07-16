@@ -1,9 +1,7 @@
 import styles from "./styles.module.scss";
 import React, { useState, useEffect, useRef } from "react";
 import * as faceapi from "face-api.js";
-import { Infer, object, string, number, boolean, union, literal, array, nullable } from 'superstruct';
 import type { CapturedImage } from "@/types";
-
 
 interface Props {
   onComplete: (images: CapturedImage[]) => void;
