@@ -72,12 +72,26 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current);
+        detectionIntervalRef.current = null;
+      }
+    };
+  }, [isLoading]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
       }
       if (detectionIntervalRef.current) {
         clearInterval(detectionIntervalRef.current);
       }
     };
-  }, [isLoading]);
+  }, []);
 
   // Start real-time face detection when video starts playing
   useEffect(() => {
@@ -111,6 +125,13 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
               })
             ).withFaceLandmarks();
 
+            // Save context state
+            overlayCtx.save();
+            
+            // Apply horizontal flip for mirrored display of detection elements
+            overlayCtx.scale(-1, 1);
+            overlayCtx.translate(-overlayCanvas.width, 0);
+
             // Draw bounding boxes and landmarks
             detections.forEach((detection) => {
               const { x, y, width, height } = detection.detection.box;
@@ -138,7 +159,9 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
               }
             });
 
-            // Show status text
+            // Restore context state for text
+            overlayCtx.restore();
+            
             overlayCtx.fillStyle = '#ffffff';
             overlayCtx.font = 'bold 18px Arial';
             overlayCtx.strokeStyle = '#000000';
@@ -161,16 +184,23 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
 
           } catch (err) {
             console.error('Detection error:', err);
+            // Restore context state in case of error
+            overlayCtx.restore();
           }
         }
       };
+
+      // Clear any existing interval
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current);
+      }
 
       // Start detection interval
       detectionIntervalRef.current = setInterval(detectFaces, 100);
     };
 
     const video = videoRef.current;
-    if (video) {
+    if (video && !isLoading) {
       video.addEventListener('loadedmetadata', startDetection);
       video.addEventListener('play', startDetection);
       
@@ -202,7 +232,7 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
 
-      // Draw video frame to canvas
+      // Draw video frame to canvas WITHOUT mirror effect for saving
       context.drawImage(video, 0, 0);
 
       // Detect face with better options
@@ -347,7 +377,7 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
             maxWidth: '400px',
             border: '2px solid #ddd',
             borderRadius: '8px',
-            transform: 'scaleX(-1)', // Mirror effect
+            transform: 'scaleX(-1)', // Mirror effect only for display
             display: 'block'
           }}
         />
@@ -361,7 +391,6 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
             width: '100%',
             height: '100%',
             pointerEvents: 'none',
-            transform: 'scaleX(-1)', // Mirror effect to match video
             borderRadius: '8px'
           }}
         />
