@@ -20,6 +20,10 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
     useState<FaceDirection | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [stabilityCount, setStabilityCount] = useState(0);
+  const [feedbackMessage, setFeedbackMessage] = useState<string>("");
+  const [feedbackType, setFeedbackType] = useState<
+    "instruction" | "success" | "error"
+  >("instruction");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -141,15 +145,6 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
     // Combined offset score
     const combinedOffset = (noseOffset + mouthOffset) / 2;
 
-    // Debug logging
-    console.log("Face metrics:", {
-      noseOffset: noseOffset.toFixed(3),
-      mouthOffset: mouthOffset.toFixed(3),
-      eyeRatio: eyeRatio.toFixed(3),
-      faceSkew: faceSkew.toFixed(3),
-      combinedOffset: combinedOffset.toFixed(3),
-    });
-
     // Improved thresholds based on multiple indicators
     const STRONG_PROFILE_THRESHOLD = 0.15;
     const MILD_PROFILE_THRESHOLD = 0.08;
@@ -214,6 +209,8 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
     if (!videoRef.current || !canvasRef.current || isCapturing) return;
 
     setIsCapturing(true);
+    setFeedbackMessage("Capturing image...");
+    setFeedbackType("success");
 
     try {
       const video = videoRef.current;
@@ -253,10 +250,16 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
       // Move to next step
       if (currentStep === "center") {
         setCurrentStep("right");
+        setFeedbackMessage("Great! Now turn your head to the right");
+        setFeedbackType("instruction");
       } else if (currentStep === "right") {
         setCurrentStep("left");
+        setFeedbackMessage("Perfect! Now turn your head to the left");
+        setFeedbackType("instruction");
       } else if (currentStep === "left") {
         setCurrentStep("complete");
+        setFeedbackMessage("All done! Processing...");
+        setFeedbackType("success");
         if (streamRef.current) {
           streamRef.current.getTracks().forEach((track) => track.stop());
         }
@@ -271,9 +274,61 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
     } catch (err) {
       console.error("Error capturing image:", err);
       setError("Failed to capture image. Please try again.");
+      setFeedbackMessage("Error capturing image. Please try again.");
+      setFeedbackType("error");
     }
 
     setIsCapturing(false);
+  };
+
+  const updateFeedbackMessage = (
+    detection: any,
+    targetDirection: FaceDirection,
+    currentDirection: FaceDirection | null,
+    isCorrect: boolean,
+    isStable: boolean
+  ) => {
+    if (!detection) {
+      setFeedbackMessage("Please position your face in the camera view");
+      setFeedbackType("instruction");
+      return;
+    }
+
+    if (isCorrect && isStable) {
+      setFeedbackMessage("Perfect! Capturing...");
+      setFeedbackType("success");
+    } else if (isCorrect && !isStable) {
+      setFeedbackMessage(`Good! Hold steady... (${stabilityCount}/12)`);
+      setFeedbackType("instruction");
+    } else {
+      // Give specific directional feedback
+      let message = "";
+      switch (targetDirection) {
+        case "front":
+          message = "Look straight at the camera";
+          break;
+        case "right":
+          message = "Turn your head to the right";
+          break;
+        case "left":
+          message = "Turn your head to the left";
+          break;
+      }
+
+      // Add current direction context for better guidance
+      if (currentDirection) {
+        if (targetDirection === "front" && currentDirection !== "front") {
+          message = "Turn back to face the camera directly";
+        } else if (targetDirection === "right" && currentDirection === "left") {
+          message = "Turn your head more to the right";
+        } else if (targetDirection === "left" && currentDirection === "right") {
+          message = "Turn your head more to the left";
+        }
+      }
+
+      setFeedbackMessage(message);
+      setFeedbackType("instruction");
+    }
   };
 
   const detectFaces = async () => {
@@ -326,6 +381,14 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
       overlayCtx.scale(-1, 1);
       overlayCtx.translate(-overlayCanvas.width, 0);
 
+      // Determine what direction we're expecting
+      const targetDirection =
+        currentStep === "center"
+          ? "front"
+          : currentStep === "right"
+          ? "right"
+          : "left";
+
       if (detection) {
         const { x, y, width, height } = detection.detection.box;
 
@@ -335,15 +398,17 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
         const stableCount = updateStabilityCount(direction);
 
         // Check if this is the direction we're looking for
-        const targetDirection =
-          currentStep === "center"
-            ? "front"
-            : currentStep === "right"
-            ? "right"
-            : "left";
-
         const isCorrectDirection = direction === targetDirection;
         const isStable = stableCount >= 9; // 9 out of 12 detections
+
+        // Update feedback message
+        updateFeedbackMessage(
+          detection,
+          targetDirection,
+          direction,
+          isCorrectDirection,
+          isStable
+        );
 
         // Auto-capture logic
         const now = Date.now();
@@ -389,49 +454,15 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
         consecutiveDetectionsRef.current = [];
         setCurrentDirection(null);
         setStabilityCount(0);
+        updateFeedbackMessage(null, targetDirection, null, false, false);
       }
 
       overlayCtx.restore();
-
-      // Draw status text
-      overlayCtx.fillStyle = "#ffffff";
-      overlayCtx.font = "bold 18px Arial";
-      overlayCtx.strokeStyle = "#000000";
-      overlayCtx.lineWidth = 2;
-
-      let statusText = "";
-      if (!detection) {
-        statusText = "No face detected";
-        overlayCtx.fillStyle = "#ff0000";
-      } else {
-        const targetDirection =
-          currentStep === "center"
-            ? "front"
-            : currentStep === "right"
-            ? "right"
-            : "left";
-        const isCorrect = currentDirection === targetDirection;
-        const isStable = stabilityCount >= 9;
-
-        if (isCorrect && isStable) {
-          statusText = "Perfect! Capturing...";
-          overlayCtx.fillStyle = "#00ff00";
-        } else if (isCorrect) {
-          statusText = `Good! Hold steady... (${stabilityCount}/12)`;
-          overlayCtx.fillStyle = "#ff9900";
-        } else {
-          statusText = `Turn ${
-            targetDirection === "front" ? "forward" : targetDirection
-          }`;
-          overlayCtx.fillStyle = "#ff9900";
-        }
-      }
-
-      overlayCtx.strokeText(statusText, 10, 30);
-      overlayCtx.fillText(statusText, 10, 30);
     } catch (err) {
       console.error("Detection error:", err);
       overlayCtx.restore();
+      setFeedbackMessage("Detection error. Please try again.");
+      setFeedbackType("error");
     }
 
     isDetectionRunningRef.current = false;
@@ -474,6 +505,20 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
       };
     }
   }, [isLoading, currentStep]);
+
+  // Initialize feedback message based on current step
+  useEffect(() => {
+    if (currentStep === "center") {
+      setFeedbackMessage("Look straight at the camera");
+      setFeedbackType("instruction");
+    } else if (currentStep === "right") {
+      setFeedbackMessage("Turn your head to the right");
+      setFeedbackType("instruction");
+    } else if (currentStep === "left") {
+      setFeedbackMessage("Turn your head to the left");
+      setFeedbackType("instruction");
+    }
+  }, [currentStep]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -546,6 +591,11 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
         <p className={styles.InstructionText}>{getInstructionText()}</p>
       </div>
 
+      {/* Main Feedback Message */}
+      <div className={`${styles.FeedbackContainer} ${styles[feedbackType]}`}>
+        <p className={styles.FeedbackMessage}>{feedbackMessage}</p>
+      </div>
+
       <div className={styles.VideoContainer}>
         <video
           ref={videoRef}
@@ -561,16 +611,6 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
       </div>
 
       {error && <div className={styles.ErrorContainer}>{error}</div>}
-
-      <div className={styles.StatusContainer}>
-        <p className={styles.StatusText}>
-          Current direction: {currentDirection || "Unknown"}
-        </p>
-        <p className={styles.StatusText}>Stability: {stabilityCount}/12</p>
-        <p className={styles.StatusText}>
-          Target: {currentStep === "center" ? "front" : currentStep}
-        </p>
-      </div>
 
       <div className={styles.ProgressIndicator}>
         <div className={styles.StepIndicators}>
