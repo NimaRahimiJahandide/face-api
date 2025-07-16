@@ -16,10 +16,9 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
   >("center");
   const [capturedImages, setCapturedImages] = useState<CapturedImage[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [currentDirection, setCurrentDirection] =
-    useState<FaceDirection | null>(null);
+  const [, setCurrentDirection] = useState<FaceDirection | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
-  const [stabilityCount, setStabilityCount] = useState(0);
+  const [, setStabilityCount] = useState(0);
   const [feedbackMessage, setFeedbackMessage] = useState<string>("");
   const [feedbackType, setFeedbackType] = useState<
     "instruction" | "success" | "error"
@@ -114,7 +113,6 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
 
     // Key landmark points
     const noseTip = points[30];
-    const noseBottom = points[33];
     const leftEyeOuter = points[36];
     const rightEyeOuter = points[45];
     const leftEyeInner = points[39];
