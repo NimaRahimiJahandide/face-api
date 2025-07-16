@@ -17,7 +17,7 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const detectionIntervalRef = useRef<number | null>(null);
 
   // Load face-api models from CDN
   useEffect(() => {
