@@ -1,3 +1,4 @@
+import styles from './styles.module.scss';
 import React from 'react';
 import type { CapturedImage } from '@/types';
 
@@ -8,21 +9,16 @@ interface Props {
 
 const PreviewPage: React.FC<Props> = ({ images, onNext }) => {
   return (
-    <div>
-      <h2>Captured Images</h2>
-      <div style={{ marginBottom: '20px' }}>
+    <div className={styles.PreviewContainer}>
+      <h2 className={styles.Title}>Captured Images</h2>
+      <div className={styles.ImagesGrid}>
         {images.map((image, index) => (
-          <div key={index} style={{ marginBottom: '20px' }}>
-            <h3>Position: {image.position}</h3>
+          <div key={index} className={styles.ImageWrapper}>
+            <h3 className={styles.ImageTitle}>Position: {image.position}</h3>
             <img
               src={image.dataUrl}
               alt={`Face ${image.position}`}
-              style={{
-                width: '100%',
-                maxWidth: '300px',
-                border: '2px solid #ddd',
-                borderRadius: '8px',
-              }}
+              className={styles.Image}
             />
           </div>
         ))}
@@ -30,15 +26,8 @@ const PreviewPage: React.FC<Props> = ({ images, onNext }) => {
 
       <button
         onClick={onNext}
-        style={{
-          padding: '10px 20px',
-          fontSize: '16px',
-          backgroundColor: '#007bff',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
+        className={styles.NextButton}
+        type="button"
       >
         Next
       </button>

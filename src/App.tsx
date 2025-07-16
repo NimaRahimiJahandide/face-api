@@ -1,46 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import InstructionsPage from '@/components/InstructionsPage';
-import CapturePage from '@/components/CapturePage';
-import PreviewPage from '@/components/PreviewPage';
-import type { CapturedImage } from '@/types';
+// App.tsx
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Home from '@/pages/home';
 
-const App: React.FC = () => {
-  const [currentPage, setCurrentPage] = useState<'instructions' | 'capture' | 'preview'>('instructions');
-  const [capturedImages, setCapturedImages] = useState<CapturedImage[]>([]);
-
-  useEffect(() => {
-    if (window.Telegram && window.Telegram.WebApp) {
-      window.Telegram.WebApp.ready();
-      window.Telegram.WebApp.expand();
-    }
-  }, []);
-
-  const handleStartCapture = () => {
-    setCurrentPage('capture');
-  };
-
-  const handleCaptureComplete = (images: CapturedImage[]) => {
-    setCapturedImages(images);
-    setCurrentPage('preview');
-  };
-
-  const handleNext = () => {
-    console.log('Next button clicked');
-  };
-
+function App() {
   return (
-    <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
-      {currentPage === 'instructions' && (
-        <InstructionsPage onStart={handleStartCapture} />
-      )}
-      {currentPage === 'capture' && (
-        <CapturePage onComplete={handleCaptureComplete} />
-      )}
-      {currentPage === 'preview' && (
-        <PreviewPage images={capturedImages} onNext={handleNext} />
-      )}
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/" element={<Home />} />
+      </Routes>
+    </Router>
   );
-};
+}
 
 export default App;

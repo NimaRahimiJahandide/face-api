@@ -1,3 +1,4 @@
+import styles from './styles.module.scss';
 import React, { useState, useEffect, useRef } from 'react';
 import * as faceapi from 'face-api.js';
 import type { CapturedImage } from '@/types';
@@ -19,7 +20,6 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
   const streamRef = useRef<MediaStream | null>(null);
   const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load face-api models from CDN
   useEffect(() => {
     const loadModels = async () => {
       try {
@@ -43,7 +43,6 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
     loadModels();
   }, []);
 
-  // Initialize camera
   useEffect(() => {
     const initCamera = async () => {
       try {
@@ -81,7 +80,6 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
     };
   }, [isLoading]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (streamRef.current) {
@@ -93,7 +91,6 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
     };
   }, []);
 
-  // Start real-time face detection when video starts playing
   useEffect(() => {
     const startDetection = () => {
       if (!videoRef.current || !overlayCanvasRef.current) return;
@@ -106,14 +103,12 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
 
       const detectFaces = async () => {
         if (video.readyState === 4) {
-          // Set overlay canvas size to match video display size
           const rect = video.getBoundingClientRect();
           overlayCanvas.width = video.videoWidth;
           overlayCanvas.height = video.videoHeight;
           overlayCanvas.style.width = `${rect.width}px`;
           overlayCanvas.style.height = `${rect.height}px`;
 
-          // Clear previous drawings
           overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
           try {
@@ -125,23 +120,17 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
               })
             ).withFaceLandmarks();
 
-            // Save context state
             overlayCtx.save();
-            
-            // Apply horizontal flip for mirrored display of detection elements
             overlayCtx.scale(-1, 1);
             overlayCtx.translate(-overlayCanvas.width, 0);
 
-            // Draw bounding boxes and landmarks
             detections.forEach((detection) => {
               const { x, y, width, height } = detection.detection.box;
               
-              // Draw bounding box
               overlayCtx.strokeStyle = detections.length === 1 ? '#00ff00' : '#ff0000';
               overlayCtx.lineWidth = 3;
               overlayCtx.strokeRect(x, y, width, height);
               
-              // Draw confidence score
               overlayCtx.fillStyle = detections.length === 1 ? '#00ff00' : '#ff0000';
               overlayCtx.font = '16px Arial';
               overlayCtx.fillText(
@@ -150,7 +139,6 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
                 y - 10
               );
 
-              // Draw face landmarks (optional)
               if (detection.landmarks) {
                 overlayCtx.fillStyle = '#ffff00';
                 detection.landmarks.positions.forEach((point) => {
@@ -159,7 +147,6 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
               }
             });
 
-            // Restore context state for text
             overlayCtx.restore();
             
             overlayCtx.fillStyle = '#ffffff';
@@ -184,18 +171,15 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
 
           } catch (err) {
             console.error('Detection error:', err);
-            // Restore context state in case of error
             overlayCtx.restore();
           }
         }
       };
 
-      // Clear any existing interval
       if (detectionIntervalRef.current) {
         clearInterval(detectionIntervalRef.current);
       }
 
-      // Start detection interval
       detectionIntervalRef.current = setInterval(detectFaces, 100);
     };
 
@@ -228,14 +212,10 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
         throw new Error('Could not get canvas context');
       }
 
-      // Set canvas size to match video
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-
-      // Draw video frame to canvas WITHOUT mirror effect for saving
       context.drawImage(video, 0, 0);
 
-      // Detect face with better options
       const detections = await faceapi.detectAllFaces(
         video, 
         new faceapi.TinyFaceDetectorOptions({ 
@@ -258,10 +238,8 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
         return;
       }
 
-      // Get image data URL
       const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
       
-      // Add captured image
       const newImage: CapturedImage = {
         dataUrl,
         position: currentStep as 'center' | 'right' | 'left'
@@ -270,18 +248,15 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
       const updatedImages = [...capturedImages, newImage];
       setCapturedImages(updatedImages);
 
-      // Move to next step
       if (currentStep === 'center') {
         setCurrentStep('right');
       } else if (currentStep === 'right') {
         setCurrentStep('left');
       } else if (currentStep === 'left') {
         setCurrentStep('complete');
-        // Stop camera
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
         }
-        // Call onComplete with all images
         onComplete(updatedImages);
       }
 
@@ -326,141 +301,81 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
 
   if (isLoading) {
     return (
-      <div style={{ textAlign: 'center', padding: '20px' }}>
-        <h2>Loading Face Detection...</h2>
-        <p>Please wait while we load the face detection models...</p>
-        <div style={{ 
-          width: '50px', 
-          height: '50px', 
-          border: '3px solid #f3f3f3',
-          borderTop: '3px solid #007bff',
-          borderRadius: '50%',
-          animation: 'spin 2s linear infinite',
-          margin: '20px auto'
-        }}></div>
-        <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
+      <div className={styles.LoadingContainer}>
+        <h2 className={styles.LoadingTitle}>Loading Face Detection...</h2>
+        <p className={styles.LoadingText}>Please wait while we load the face detection models...</p>
+        <div className={styles.LoadingSpinner}></div>
       </div>
     );
   }
 
   if (currentStep === 'complete') {
     return (
-      <div style={{ textAlign: 'center', padding: '20px' }}>
-        <h2>Capture Complete!</h2>
-        <p>Processing your images...</p>
+      <div className={styles.CompleteContainer}>
+        <h2 className={styles.CompleteTitle}>Capture Complete!</h2>
+        <p className={styles.CompleteText}>Processing your images...</p>
       </div>
     );
   }
 
   return (
-    <div style={{ textAlign: 'center', padding: '20px' }}>
-      <h2>Face Capture</h2>
+    <div className={styles.CaptureContainer}>
+      <h2 className={styles.Title}>Face Capture</h2>
       
-      <div style={{ marginBottom: '20px' }}>
-        <p style={{ fontSize: '18px', fontWeight: 'bold' }}>{getProgressText()}</p>
-        <p style={{ fontSize: '16px', color: '#666' }}>{getInstructionText()}</p>
+      <div className={styles.ProgressSection}>
+        <p className={styles.ProgressText}>{getProgressText()}</p>
+        <p className={styles.InstructionText}>{getInstructionText()}</p>
       </div>
 
-      <div style={{ marginBottom: '20px', position: 'relative', display: 'inline-block' }}>
+      <div className={styles.VideoContainer}>
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          style={{
-            width: '100%',
-            maxWidth: '400px',
-            border: '2px solid #ddd',
-            borderRadius: '8px',
-            transform: 'scaleX(-1)', // Mirror effect only for display
-            display: 'block'
-          }}
+          className={styles.Video}
         />
         
         <canvas
           ref={overlayCanvasRef}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            pointerEvents: 'none',
-            borderRadius: '8px'
-          }}
+          className={styles.OverlayCanvas}
         />
         
         <canvas
           ref={canvasRef}
-          style={{ display: 'none' }}
+          className={styles.HiddenCanvas}
         />
       </div>
 
       {error && (
-        <div style={{ 
-          color: 'red', 
-          marginBottom: '20px',
-          padding: '10px',
-          backgroundColor: '#ffebee',
-          borderRadius: '4px',
-          border: '1px solid #ffcdd2'
-        }}>
+        <div className={styles.ErrorContainer}>
           {error}
         </div>
       )}
 
-      <div style={{ marginBottom: '20px' }}>
+      <div className={styles.ButtonContainer}>
         <button
           onClick={captureImage}
           disabled={isProcessing}
-          style={{
-            padding: '12px 24px',
-            fontSize: '16px',
-            backgroundColor: isProcessing ? '#ccc' : '#007bff',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: isProcessing ? 'not-allowed' : 'pointer',
-            transition: 'background-color 0.3s',
-          }}
+          className={`${styles.CaptureButton} ${isProcessing ? styles.Processing : ''}`}
+          type="button"
         >
           {isProcessing ? 'Processing...' : 'Capture'}
         </button>
       </div>
 
-      <div style={{ marginTop: '20px' }}>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          gap: '10px',
-          marginBottom: '10px'
-        }}>
+      <div className={styles.ProgressIndicator}>
+        <div className={styles.StepIndicators}>
           {[1, 2, 3].map((step) => (
             <div
               key={step}
-              style={{
-                width: '30px',
-                height: '30px',
-                borderRadius: '50%',
-                backgroundColor: step <= capturedImages.length ? '#007bff' : '#ddd',
-                color: 'white',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '12px',
-                fontWeight: 'bold'
-              }}
+              className={`${styles.StepCircle} ${step <= capturedImages.length ? styles.Completed : ''}`}
             >
               {step}
             </div>
           ))}
         </div>
-        <p style={{ fontSize: '14px', color: '#666' }}>
+        <p className={styles.ImagesCount}>
           Images captured: {capturedImages.length}/3
         </p>
       </div>

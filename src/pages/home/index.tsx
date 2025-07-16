@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import styles from './index.module.scss';
+import { useEffect, useState } from 'react';
 import InstructionsPage from '@/components/InstructionsPage';
 import CapturePage from '@/components/CapturePage';
 import PreviewPage from '@/components/PreviewPage';
 import type { CapturedImage } from '@/types';
 
-const App: React.FC = () => {
+const Home = () => {
   const [currentPage, setCurrentPage] = useState<'instructions' | 'capture' | 'preview'>('instructions');
   const [capturedImages, setCapturedImages] = useState<CapturedImage[]>([]);
 
@@ -29,7 +30,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
+    <div className={styles.AppContainer}>
       {currentPage === 'instructions' && (
         <InstructionsPage onStart={handleStartCapture} />
       )}
@@ -43,4 +44,4 @@ const App: React.FC = () => {
   );
 };
 
-export default App;
+export default Home;
