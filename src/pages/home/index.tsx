@@ -26,7 +26,9 @@ const Home = () => {
   };
 
   const handleNext = () => {
-    console.log('Next button clicked');
+    // Reset to initial state
+    setCurrentPage('instructions');
+    setCapturedImages([]);
   };
 
   return (
