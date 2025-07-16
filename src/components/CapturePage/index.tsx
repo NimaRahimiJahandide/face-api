@@ -1,45 +1,47 @@
+
 import styles from "./styles.module.scss";
 import React, { useState, useEffect, useRef } from "react";
 import * as faceapi from "face-api.js";
-import { Infer, object, string, number, boolean, union, literal, array, nullable } from 'superstruct';
-import type { CapturedImage } from "@/types";
 
-
-interface Props {
-  onComplete: (images: CapturedImage[]) => void;
+interface CapturePageProps {
+  onComplete: CaptureCompleteHandler;
 }
 
-type FaceDirection = "front" | "right" | "left";
+const CapturePage: React.FC<CapturePageProps> = ({ onComplete }) => {
+  // State management with precise typing
+  const [isLoading, setIsLoading]: [boolean, SetBoolean] = useState<boolean>(true);
+  const [currentStep, setCurrentStep]: [CaptureStep, SetCaptureStep] = useState<CaptureStep>("center");
+  const [capturedImages, setCapturedImages]: [CapturedImage[], SetCapturedImages] = useState<CapturedImage[]>([]);
+  const [error, setError]: [string | null, SetStringOrNull] = useState<string | null>(null);
+  const [currentDirection, setCurrentDirection]: [FaceDirection | null, SetFaceDirection] = useState<FaceDirection | null>(null);
+  const [isCapturing, setIsCapturing]: [boolean, SetBoolean] = useState<boolean>(false);
+  const [stabilityCount, setStabilityCount]: [number, SetNumber] = useState<number>(0);
+  const [feedbackMessage, setFeedbackMessage]: [string, SetString] = useState<string>("");
+  const [feedbackType, setFeedbackType]: [FeedbackType, SetFeedbackType] = useState<FeedbackType>("instruction");
 
-const CapturePage: React.FC<Props> = ({ onComplete }) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [currentStep, setCurrentStep] = useState<
-    "center" | "right" | "left" | "complete"
-  >("center");
-  const [capturedImages, setCapturedImages] = useState<CapturedImage[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [currentDirection, setCurrentDirection] =
-    useState<FaceDirection | null>(null);
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [stabilityCount, setStabilityCount] = useState(0);
-  const [feedbackMessage, setFeedbackMessage] = useState<string>("");
-  const [feedbackType, setFeedbackType] = useState<
-    "instruction" | "success" | "error"
-  >("instruction");
+  // Refs with precise typing
+  const videoRef: VideoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef: CanvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayCanvasRef: CanvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef: MediaStreamRef = useRef<MediaStream | null>(null);
+  const animationFrameRef: AnimationFrameRef = useRef<number | null>(null);
+  const lastCaptureTimeRef: React.RefObject<number> = useRef<number>(0);
+  const consecutiveDetectionsRef: React.RefObject<FaceDirection[]> = useRef<FaceDirection[]>([]);
+  const isDetectionRunningRef: React.RefObject<boolean> = useRef<boolean>(false);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
-  const lastCaptureTimeRef = useRef<number>(0);
-  const consecutiveDetectionsRef = useRef<FaceDirection[]>([]);
-  const isDetectionRunningRef = useRef<boolean>(false);
+  // Face detection configuration
+  const detectionConfig: FaceDetectionConfig = {
+    inputSize: 416,
+    scoreThreshold: 0.5,
+    stabilityThreshold: 9,
+    cooldownDuration: 1000,
+    maxDetections: 12,
+  };
 
   useEffect(() => {
-    const loadModels = async () => {
+    const loadModels = async (): Promise<void> => {
       try {
-        const MODEL_URL = "/models";
+        const MODEL_URL: string = "/models";
 
         await Promise.all([
           faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
@@ -48,22 +50,19 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
 
         console.log("Face-api models loaded successfully");
         setIsLoading(false);
-      } catch (err) {
+      } catch (err: unknown) {
         console.error("Error loading models:", err);
         try {
-          const CDN_URL =
-            "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model";
+          const CDN_URL: string = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model";
           await Promise.all([
             faceapi.nets.tinyFaceDetector.loadFromUri(CDN_URL),
             faceapi.nets.faceLandmark68Net.loadFromUri(CDN_URL),
           ]);
           console.log("Face-api models loaded from CDN");
           setIsLoading(false);
-        } catch (cdnErr) {
+        } catch (cdnErr: unknown) {
           console.error("Error loading models from CDN:", cdnErr);
-          setError(
-            "Failed to load face detection models. Please refresh the page."
-          );
+          setError("Failed to load face detection models. Please refresh the page.");
           setIsLoading(false);
         }
       }
@@ -73,21 +72,23 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
   }, []);
 
   useEffect(() => {
-    const initCamera = async () => {
+    const initCamera = async (): Promise<void> => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        const constraints: MediaStreamConstraints = {
           video: {
             width: { ideal: 640 },
             height: { ideal: 480 },
             facingMode: "user",
           },
-        });
+        };
+
+        const stream: MediaStream = await navigator.mediaDevices.getUserMedia(constraints);
 
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           streamRef.current = stream;
         }
-      } catch (err) {
+      } catch (err: unknown) {
         console.error("Error accessing camera:", err);
         setError("Failed to access camera. Please allow camera permissions.");
       }
@@ -97,9 +98,9 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
       initCamera();
     }
 
-    return () => {
+    return (): void => {
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current.getTracks().forEach((track: MediaStreamTrack) => track.stop());
         streamRef.current = null;
       }
       if (animationFrameRef.current) {
@@ -109,105 +110,102 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
     };
   }, [isLoading]);
 
-  const determineFaceDirection = (
-    landmarks: faceapi.FaceLandmarks68
-  ): FaceDirection => {
-    const points = landmarks.positions;
+  const determineFaceDirection = (landmarks: FaceApiLandmarks): DirectionDeterminationResult => {
+    const points: FaceApiPoint[] = landmarks.positions;
 
-    // Key landmark points
-    const noseTip = points[30];
-    const noseBottom = points[33];
-    const leftEyeOuter = points[36];
-    const rightEyeOuter = points[45];
-    const leftEyeInner = points[39];
-    const rightEyeInner = points[42];
-    const leftMouthCorner = points[48];
-    const rightMouthCorner = points[54];
-    const chinTip = points[8];
+    // Key landmark points with precise indexing
+    const noseTip: FaceApiPoint = points[30];
+    const noseBottom: FaceApiPoint = points[33];
+    const leftEyeOuter: FaceApiPoint = points[36];
+    const rightEyeOuter: FaceApiPoint = points[45];
+    const leftEyeInner: FaceApiPoint = points[39];
+    const rightEyeInner: FaceApiPoint = points[42];
+    const leftMouthCorner: FaceApiPoint = points[48];
+    const rightMouthCorner: FaceApiPoint = points[54];
+    const chinTip: FaceApiPoint = points[8];
 
     // Calculate face measurements
-    const eyeDistance = Math.abs(rightEyeOuter.x - leftEyeOuter.x);
-    const faceCenterX = (leftEyeOuter.x + rightEyeOuter.x) / 2;
+    const eyeDistance: number = Math.abs(rightEyeOuter.x - leftEyeOuter.x);
+    const faceCenterX: number = (leftEyeOuter.x + rightEyeOuter.x) / 2;
 
     // Multiple direction indicators
-    const noseOffset = (noseTip.x - faceCenterX) / eyeDistance;
-    const mouthCenterX = (leftMouthCorner.x + rightMouthCorner.x) / 2;
-    const mouthOffset = (mouthCenterX - faceCenterX) / eyeDistance;
+    const noseOffset: number = (noseTip.x - faceCenterX) / eyeDistance;
+    const mouthCenterX: number = (leftMouthCorner.x + rightMouthCorner.x) / 2;
+    const mouthOffset: number = (mouthCenterX - faceCenterX) / eyeDistance;
 
     // Eye visibility ratio (key for profile detection)
-    const leftEyeWidth = Math.abs(leftEyeOuter.x - leftEyeInner.x);
-    const rightEyeWidth = Math.abs(rightEyeOuter.x - rightEyeInner.x);
-    const eyeRatio = leftEyeWidth / rightEyeWidth;
+    const leftEyeWidth: number = Math.abs(leftEyeOuter.x - leftEyeInner.x);
+    const rightEyeWidth: number = Math.abs(rightEyeOuter.x - rightEyeInner.x);
+    const eyeRatio: number = leftEyeWidth / rightEyeWidth;
 
     // Nose-chin alignment (another profile indicator)
-    const noseToFaceCenter = Math.abs(noseTip.x - faceCenterX);
-    const chinToFaceCenter = Math.abs(chinTip.x - faceCenterX);
-    const faceSkew = (noseToFaceCenter + chinToFaceCenter) / eyeDistance;
+    const noseToFaceCenter: number = Math.abs(noseTip.x - faceCenterX);
+    const chinToFaceCenter: number = Math.abs(chinTip.x - faceCenterX);
+    const faceSkew: number = (noseToFaceCenter + chinToFaceCenter) / eyeDistance;
 
     // Combined offset score
-    const combinedOffset = (noseOffset + mouthOffset) / 2;
+    const combinedOffset: number = (noseOffset + mouthOffset) / 2;
 
     // Improved thresholds based on multiple indicators
-    const STRONG_PROFILE_THRESHOLD = 0.15;
-    const MILD_PROFILE_THRESHOLD = 0.08;
-    const EYE_RATIO_PROFILE_THRESHOLD = 0.7;
-    const EYE_RATIO_REVERSE_THRESHOLD = 1.4;
+    const STRONG_PROFILE_THRESHOLD: number = 0.15;
+    const MILD_PROFILE_THRESHOLD: number = 0.08;
+    const EYE_RATIO_PROFILE_THRESHOLD: number = 0.7;
+    const EYE_RATIO_REVERSE_THRESHOLD: number = 1.4;
+
+    let direction: FaceDirection = "front";
+    let confidence: number = 0;
 
     // REVERSED LOGIC: Since video is mirrored, we need to flip the left/right detection
-    // When user turns their head RIGHT (in real world), nose moves LEFT in mirrored view
-    // When user turns their head LEFT (in real world), nose moves RIGHT in mirrored view
-
-    // Strong profile detection (multiple indicators agree)
-    if (
-      combinedOffset > STRONG_PROFILE_THRESHOLD ||
-      eyeRatio > EYE_RATIO_REVERSE_THRESHOLD
-    ) {
-      return "left"; // Changed from 'right' to 'left'
+    if (combinedOffset > STRONG_PROFILE_THRESHOLD || eyeRatio > EYE_RATIO_REVERSE_THRESHOLD) {
+      direction = "left";
+      confidence = Math.max(combinedOffset / STRONG_PROFILE_THRESHOLD, eyeRatio / EYE_RATIO_REVERSE_THRESHOLD);
+    } else if (combinedOffset < -STRONG_PROFILE_THRESHOLD || eyeRatio < EYE_RATIO_PROFILE_THRESHOLD) {
+      direction = "right";
+      confidence = Math.max(Math.abs(combinedOffset) / STRONG_PROFILE_THRESHOLD, (1 - eyeRatio) / (1 - EYE_RATIO_PROFILE_THRESHOLD));
+    } else if ((combinedOffset > MILD_PROFILE_THRESHOLD && eyeRatio > 1.2) || (faceSkew > 0.12 && combinedOffset > 0.05)) {
+      direction = "left";
+      confidence = Math.min(combinedOffset / MILD_PROFILE_THRESHOLD, eyeRatio / 1.2);
+    } else if ((combinedOffset < -MILD_PROFILE_THRESHOLD && eyeRatio < 0.8) || (faceSkew > 0.12 && combinedOffset < -0.05)) {
+      direction = "right";
+      confidence = Math.min(Math.abs(combinedOffset) / MILD_PROFILE_THRESHOLD, (1 - eyeRatio) / (1 - 0.8));
+    } else {
+      direction = "front";
+      confidence = 1 - Math.abs(combinedOffset) / MILD_PROFILE_THRESHOLD;
     }
 
-    if (
-      combinedOffset < -STRONG_PROFILE_THRESHOLD ||
-      eyeRatio < EYE_RATIO_PROFILE_THRESHOLD
-    ) {
-      return "right"; // Changed from 'left' to 'right'
-    }
-
-    // Mild profile detection (at least one strong indicator)
-    if (
-      (combinedOffset > MILD_PROFILE_THRESHOLD && eyeRatio > 1.2) ||
-      (faceSkew > 0.12 && combinedOffset > 0.05)
-    ) {
-      return "left"; // Changed from 'right' to 'left'
-    }
-
-    if (
-      (combinedOffset < -MILD_PROFILE_THRESHOLD && eyeRatio < 0.8) ||
-      (faceSkew > 0.12 && combinedOffset < -0.05)
-    ) {
-      return "right"; // Changed from 'left' to 'right'
-    }
-
-    // Default to front if no profile indicators are strong enough
-    return "front";
+    return {
+      direction,
+      confidence: Math.max(0, Math.min(1, confidence)),
+      metrics: {
+        noseOffset,
+        mouthOffset,
+        eyeRatio,
+        faceSkew,
+        combinedOffset,
+      },
+    };
   };
 
-  const updateStabilityCount = (direction: FaceDirection) => {
-    // Track last 12 detections for better stability
-    consecutiveDetectionsRef.current.push(direction);
-    if (consecutiveDetectionsRef.current.length > 12) {
-      consecutiveDetectionsRef.current.shift();
+  const updateStabilityCount = (direction: FaceDirection): number => {
+    // Track last detections for better stability
+    if (consecutiveDetectionsRef.current) {
+      consecutiveDetectionsRef.current.push(direction);
+      if (consecutiveDetectionsRef.current.length > detectionConfig.maxDetections) {
+        consecutiveDetectionsRef.current.shift();
+      }
+
+      // Count how many of the last detections match the current direction
+      const matchingDetections: number = consecutiveDetectionsRef.current.filter(
+        (d: FaceDirection) => d === direction
+      ).length;
+      setStabilityCount(matchingDetections);
+
+      return matchingDetections;
     }
-
-    // Count how many of the last detections match the current direction
-    const matchingDetections = consecutiveDetectionsRef.current.filter(
-      (d) => d === direction
-    ).length;
-    setStabilityCount(matchingDetections);
-
-    return matchingDetections;
+    return 0;
   };
 
-  const captureImage = async (direction: FaceDirection) => {
+  const captureImage = async (direction: FaceDirection): Promise<void> => {
     if (!videoRef.current || !canvasRef.current || isCapturing) return;
 
     setIsCapturing(true);
@@ -215,12 +213,12 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
     setFeedbackType("success");
 
     try {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      const context = canvas.getContext("2d");
+      const video: VideoElement = videoRef.current;
+      const canvas: CanvasElement = canvasRef.current;
+      const context: CanvasContext2D = canvas.getContext("2d");
 
-      if (!context) {
-        throw new Error("Could not get canvas context");
+      if (!context || !video) {
+        throw new Error("Could not get canvas context or video element");
       }
 
       canvas.width = video.videoWidth;
@@ -233,9 +231,9 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
       context.drawImage(video, 0, 0);
       context.restore();
 
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+      const dataUrl: string = canvas.toDataURL("image/jpeg", 0.8);
 
-      const positionMap: Record<FaceDirection, "center" | "right" | "left"> = {
+      const positionMap: DirectionMapping = {
         front: "center",
         right: "right",
         left: "left",
@@ -246,7 +244,7 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
         position: positionMap[direction],
       };
 
-      const updatedImages = [...capturedImages, newImage];
+      const updatedImages: CapturedImage[] = [...capturedImages, newImage];
       setCapturedImages(updatedImages);
 
       // Move to next step
@@ -263,17 +261,21 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
         setFeedbackMessage("All done! Processing...");
         setFeedbackType("success");
         if (streamRef.current) {
-          streamRef.current.getTracks().forEach((track) => track.stop());
+          streamRef.current.getTracks().forEach((track: MediaStreamTrack) => track.stop());
         }
         onComplete(updatedImages);
       }
 
       // Reset counters
-      consecutiveDetectionsRef.current = [];
-      lastCaptureTimeRef.current = Date.now();
+      if (consecutiveDetectionsRef.current) {
+        consecutiveDetectionsRef.current = [];
+      }
+      if (lastCaptureTimeRef.current !== undefined) {
+        lastCaptureTimeRef.current = Date.now();
+      }
       setError(null);
       setStabilityCount(0);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Error capturing image:", err);
       setError("Failed to capture image. Please try again.");
       setFeedbackMessage("Error capturing image. Please try again.");
@@ -283,81 +285,35 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
     setIsCapturing(false);
   };
 
-  // const updateFeedbackMessage = (
-  //   detection: any,
-  //   targetDirection: FaceDirection,
-  //   currentDirection: FaceDirection | null,
-  //   isCorrect: boolean,
-  //   isStable: boolean
-  // ) => {
-  //   if (!detection) {
-  //     setFeedbackMessage("Please position your face in the camera view");
-  //     setFeedbackType("instruction");
-  //     return;
-  //   }
-
-  //   if (isCorrect && isStable) {
-  //     setFeedbackMessage("Perfect! Capturing...");
-  //     setFeedbackType("success");
-  //   } else if (isCorrect && !isStable) {
-  //     setFeedbackMessage(`Good! Hold steady... (${stabilityCount}/12)`);
-  //     setFeedbackType("instruction");
-  //   } else {
-  //     // Give specific directional feedback
-  //     let message = "";
-  //     switch (targetDirection) {
-  //       case "front":
-  //         message = "Look straight at the camera";
-  //         break;
-  //       case "right":
-  //         message = "Turn your head to the right";
-  //         break;
-  //       case "left":
-  //         message = "Turn your head to the left";
-  //         break;
-  //     }
-
-  //     // Add current direction context for better guidance
-  //     if (currentDirection) {
-  //       if (targetDirection === "front" && currentDirection !== "front") {
-  //         message = "Turn back to face the camera directly";
-  //       } else if (targetDirection === "right" && currentDirection === "left") {
-  //         message = "Turn your head more to the right";
-  //       } else if (targetDirection === "left" && currentDirection === "right") {
-  //         message = "Turn your head more to the left";
-  //       }
-  //     }
-
-  //     setFeedbackMessage(message);
-  //     setFeedbackType("instruction");
-  //   }
-  // };
-
-  const detectFaces = async () => {
+  const detectFaces = async (): Promise<void> => {
     if (
       !videoRef.current ||
       !overlayCanvasRef.current ||
       isCapturing ||
-      isDetectionRunningRef.current
+      (isDetectionRunningRef.current && isDetectionRunningRef.current)
     ) {
       animationFrameRef.current = requestAnimationFrame(detectFaces);
       return;
     }
 
-    isDetectionRunningRef.current = true;
+    if (isDetectionRunningRef.current !== undefined) {
+      isDetectionRunningRef.current = true;
+    }
 
-    const video = videoRef.current;
-    const overlayCanvas = overlayCanvasRef.current;
-    const overlayCtx = overlayCanvas.getContext("2d");
+    const video: VideoElement = videoRef.current;
+    const overlayCanvas: CanvasElement = overlayCanvasRef.current;
+    const overlayCtx: CanvasContext2D = overlayCanvas.getContext("2d");
 
-    if (!overlayCtx || video.readyState !== 4) {
-      isDetectionRunningRef.current = false;
+    if (!overlayCtx || !video || video.readyState !== 4) {
+      if (isDetectionRunningRef.current !== undefined) {
+        isDetectionRunningRef.current = false;
+      }
       animationFrameRef.current = requestAnimationFrame(detectFaces);
       return;
     }
 
     // Update canvas size to match video
-    const videoRect = video.getBoundingClientRect();
+    const videoRect: DOMRect = video.getBoundingClientRect();
     overlayCanvas.width = video.videoWidth;
     overlayCanvas.height = video.videoHeight;
     overlayCanvas.style.width = `${videoRect.width}px`;
@@ -368,12 +324,12 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
 
     try {
       // Use detectSingleFace for better performance and consistency
-      const detection = await faceapi
+      const detection: FaceApiDetectionResult | undefined = await faceapi
         .detectSingleFace(
           video,
           new faceapi.TinyFaceDetectorOptions({
-            inputSize: 416,
-            scoreThreshold: 0.5,
+            inputSize: detectionConfig.inputSize,
+            scoreThreshold: detectionConfig.scoreThreshold,
           })
         )
         .withFaceLandmarks();
@@ -384,90 +340,72 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
       overlayCtx.translate(-overlayCanvas.width, 0);
 
       // Determine what direction we're expecting
-      const targetDirection =
-        currentStep === "center"
-          ? "front"
-          : currentStep === "right"
-          ? "right"
-          : "left";
+      const targetDirection: FaceDirection =
+        currentStep === "center" ? "front" : currentStep === "right" ? "right" : "left";
 
       if (detection) {
-        const { x, y, width, height } = detection.detection.box;
+        const { x, y, width, height }: FaceApiBox = detection.detection.box;
 
         // Determine face direction
-        const direction = determineFaceDirection(detection.landmarks);
+        const directionResult: DirectionDeterminationResult = determineFaceDirection(detection.landmarks);
+        const direction: FaceDirection = directionResult.direction;
         setCurrentDirection(direction);
-        const stableCount = updateStabilityCount(direction);
+        const stableCount: number = updateStabilityCount(direction);
 
         // Check if this is the direction we're looking for
-        const isCorrectDirection = direction === targetDirection;
-        const isStable = stableCount >= 9; // 9 out of 12 detections
-
-        // Update feedback message
-        // updateFeedbackMessage(
-        //   detection,
-        //   targetDirection,
-        //   direction,
-        //   isCorrectDirection,
-        //   isStable
-        // );
+        const isCorrectDirection: boolean = direction === targetDirection;
+        const isStable: boolean = stableCount >= detectionConfig.stabilityThreshold;
 
         // Auto-capture logic
-        const now = Date.now();
-        const timeSinceLastCapture = now - lastCaptureTimeRef.current;
-        const cooldownPassed = timeSinceLastCapture > 1000; // 1 second cooldown
+        const now: number = Date.now();
+        const timeSinceLastCapture: number = now - (lastCaptureTimeRef.current || 0);
+        const cooldownPassed: boolean = timeSinceLastCapture > detectionConfig.cooldownDuration;
 
-        if (
-          isCorrectDirection &&
-          isStable &&
-          cooldownPassed &&
-          currentStep !== "complete"
-        ) {
+        if (isCorrectDirection && isStable && cooldownPassed && currentStep !== "complete") {
           setTimeout(() => captureImage(direction), 100); // Small delay for stability
         }
 
         // Draw face bounding box
-        overlayCtx.strokeStyle =
-          isCorrectDirection && isStable ? "#00ff00" : "#ff9900";
+        overlayCtx.strokeStyle = isCorrectDirection && isStable ? "#00ff00" : "#ff9900";
         overlayCtx.lineWidth = 3;
         overlayCtx.strokeRect(x, y, width, height);
 
         // Draw confidence and direction info
-        overlayCtx.fillStyle =
-          isCorrectDirection && isStable ? "#00ff00" : "#ff9900";
+        overlayCtx.fillStyle = isCorrectDirection && isStable ? "#00ff00" : "#ff9900";
         overlayCtx.font = "bold 16px Arial";
         overlayCtx.strokeStyle = "#000000";
         overlayCtx.lineWidth = 3;
-        const infoText = `${Math.round(
-          detection.detection.score * 100
-        )}% - ${direction}`;
+        const infoText: string = `${Math.round(detection.detection.score * 100)}% - ${direction}`;
         overlayCtx.strokeText(infoText, x, y - 10);
         overlayCtx.fillText(infoText, x, y - 10);
 
         // Draw key landmarks for debugging
         overlayCtx.fillStyle = "#ffff00";
-        const keyPoints = [30, 33, 36, 45, 39, 42, 48, 54, 8]; // nose tip, nose bottom, eyes, mouth, chin
-        keyPoints.forEach((pointIndex) => {
-          const point = detection.landmarks.positions[pointIndex];
+        const keyPoints: number[] = [30, 33, 36, 45, 39, 42, 48, 54, 8]; // nose tip, nose bottom, eyes, mouth, chin
+        keyPoints.forEach((pointIndex: number) => {
+          const point: FaceApiPoint = detection.landmarks.positions[pointIndex];
           overlayCtx.fillRect(point.x - 2, point.y - 2, 4, 4);
         });
       } else {
         // Reset stability when no face is detected
-        consecutiveDetectionsRef.current = [];
+        if (consecutiveDetectionsRef.current) {
+          consecutiveDetectionsRef.current = [];
+        }
         setCurrentDirection(null);
         setStabilityCount(0);
-        // updateFeedbackMessage(null, targetDirection, null, false, false);
       }
 
       overlayCtx.restore();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Detection error:", err);
       overlayCtx.restore();
       setFeedbackMessage("Detection error. Please try again.");
       setFeedbackType("error");
     }
 
-    isDetectionRunningRef.current = false;
+    if (isDetectionRunningRef.current !== undefined) {
+      isDetectionRunningRef.current = false;
+    }
 
     // Continue detection loop only if not complete
     if (currentStep !== "complete") {
@@ -477,9 +415,9 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
 
   useEffect(() => {
     if (!isLoading && videoRef.current && currentStep !== "complete") {
-      const video = videoRef.current;
+      const video: VideoElement = videoRef.current;
 
-      const startDetection = () => {
+      const startDetection = (): void => {
         if (animationFrameRef.current) {
           cancelAnimationFrame(animationFrameRef.current);
         }
@@ -490,16 +428,18 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
       };
 
       // Start detection when video is ready
-      if (video.readyState >= 2) {
+      if (video && video.readyState >= 2) {
         startDetection();
-      } else {
+      } else if (video) {
         video.addEventListener("loadeddata", startDetection);
         video.addEventListener("canplay", startDetection);
       }
 
-      return () => {
-        video.removeEventListener("loadeddata", startDetection);
-        video.removeEventListener("canplay", startDetection);
+      return (): void => {
+        if (video) {
+          video.removeEventListener("loadeddata", startDetection);
+          video.removeEventListener("canplay", startDetection);
+        }
         if (animationFrameRef.current) {
           cancelAnimationFrame(animationFrameRef.current);
           animationFrameRef.current = null;
@@ -524,14 +464,14 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
 
   // Cleanup on unmount
   useEffect(() => {
-    return () => {
+    return (): void => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
   }, []);
 
-  const getInstructionText = () => {
+  const getInstructionText = (): string => {
     switch (currentStep) {
       case "center":
         return "Look straight at the camera and hold steady";
@@ -546,7 +486,7 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
     }
   };
 
-  const getProgressText = () => {
+  const getProgressText = (): string => {
     switch (currentStep) {
       case "center":
         return "Step 1 of 3: Front Position";
