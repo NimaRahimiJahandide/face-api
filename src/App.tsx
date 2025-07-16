@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import InstructionsPage from './components/InstructionsPage';
 import CapturePage from './components/CapturePage';
 import PreviewPage from './components/PreviewPage';
-import { CapturedImage } from './types'; // یا از CapturePage هم می‌تونی ایمپورت کنی
+import type { CapturedImage } from '@/types';
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<'instructions' | 'capture' | 'preview'>('instructions');

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as faceapi from 'face-api.js';
-import { CapturedImage } from '../types';
+import type { CapturedImage } from '@/types';
 
 interface Props {
   onComplete: (images: CapturedImage[]) => void;

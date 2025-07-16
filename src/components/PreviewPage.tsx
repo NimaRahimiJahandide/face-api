@@ -1,5 +1,5 @@
 import React from 'react';
-import { CapturedImage } from '../types';
+import type { CapturedImage } from '@/types';
 
 interface Props {
   images: CapturedImage[];
