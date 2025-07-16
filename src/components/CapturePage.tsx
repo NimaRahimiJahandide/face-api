@@ -347,7 +347,7 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
             maxWidth: '400px',
             border: '2px solid #ddd',
             borderRadius: '8px',
-            // transform: 'scaleX(-1)', // Mirror effect
+            transform: 'scaleX(-1)', // Mirror effect
             display: 'block'
           }}
         />
@@ -361,7 +361,7 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
             width: '100%',
             height: '100%',
             pointerEvents: 'none',
-            // transform: 'scaleX(-1)', // Mirror effect to match video
+            transform: 'scaleX(-1)', // Mirror effect to match video
             borderRadius: '8px'
           }}
         />

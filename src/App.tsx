@@ -8,7 +8,6 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<'instructions' | 'capture' | 'preview'>('instructions');
   const [capturedImages, setCapturedImages] = useState<CapturedImage[]>([]);
 
-  // Initialize Telegram WebApp if available
   useEffect(() => {
     if (window.Telegram && window.Telegram.WebApp) {
       window.Telegram.WebApp.ready();
