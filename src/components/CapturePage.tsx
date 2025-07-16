@@ -15,7 +15,9 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load face-api models from CDN
   useEffect(() => {
@@ -71,7 +73,115 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current);
+      }
     };
+  }, [isLoading]);
+
+  // Start real-time face detection when video starts playing
+  useEffect(() => {
+    const startDetection = () => {
+      if (!videoRef.current || !overlayCanvasRef.current) return;
+
+      const video = videoRef.current;
+      const overlayCanvas = overlayCanvasRef.current;
+      const overlayCtx = overlayCanvas.getContext('2d');
+
+      if (!overlayCtx) return;
+
+      const detectFaces = async () => {
+        if (video.readyState === 4) {
+          // Set overlay canvas size to match video display size
+          const rect = video.getBoundingClientRect();
+          overlayCanvas.width = video.videoWidth;
+          overlayCanvas.height = video.videoHeight;
+          overlayCanvas.style.width = `${rect.width}px`;
+          overlayCanvas.style.height = `${rect.height}px`;
+
+          // Clear previous drawings
+          overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+          try {
+            const detections = await faceapi.detectAllFaces(
+              video, 
+              new faceapi.TinyFaceDetectorOptions({ 
+                inputSize: 416, 
+                scoreThreshold: 0.5 
+              })
+            ).withFaceLandmarks();
+
+            // Draw bounding boxes and landmarks
+            detections.forEach((detection) => {
+              const { x, y, width, height } = detection.detection.box;
+              
+              // Draw bounding box
+              overlayCtx.strokeStyle = detections.length === 1 ? '#00ff00' : '#ff0000';
+              overlayCtx.lineWidth = 3;
+              overlayCtx.strokeRect(x, y, width, height);
+              
+              // Draw confidence score
+              overlayCtx.fillStyle = detections.length === 1 ? '#00ff00' : '#ff0000';
+              overlayCtx.font = '16px Arial';
+              overlayCtx.fillText(
+                `${Math.round(detection.detection.score * 100)}%`,
+                x,
+                y - 10
+              );
+
+              // Draw face landmarks (optional)
+              if (detection.landmarks) {
+                overlayCtx.fillStyle = '#ffff00';
+                detection.landmarks.positions.forEach((point) => {
+                  overlayCtx.fillRect(point.x - 1, point.y - 1, 2, 2);
+                });
+              }
+            });
+
+            // Show status text
+            overlayCtx.fillStyle = '#ffffff';
+            overlayCtx.font = 'bold 18px Arial';
+            overlayCtx.strokeStyle = '#000000';
+            overlayCtx.lineWidth = 2;
+            
+            let statusText = '';
+            if (detections.length === 0) {
+              statusText = 'No face detected';
+              overlayCtx.fillStyle = '#ff0000';
+            } else if (detections.length === 1) {
+              statusText = 'Face detected - Ready to capture';
+              overlayCtx.fillStyle = '#00ff00';
+            } else {
+              statusText = 'Multiple faces detected';
+              overlayCtx.fillStyle = '#ff0000';
+            }
+            
+            overlayCtx.strokeText(statusText, 10, 30);
+            overlayCtx.fillText(statusText, 10, 30);
+
+          } catch (err) {
+            console.error('Detection error:', err);
+          }
+        }
+      };
+
+      // Start detection interval
+      detectionIntervalRef.current = setInterval(detectFaces, 100);
+    };
+
+    const video = videoRef.current;
+    if (video) {
+      video.addEventListener('loadedmetadata', startDetection);
+      video.addEventListener('play', startDetection);
+      
+      return () => {
+        video.removeEventListener('loadedmetadata', startDetection);
+        video.removeEventListener('play', startDetection);
+        if (detectionIntervalRef.current) {
+          clearInterval(detectionIntervalRef.current);
+        }
+      };
+    }
   }, [isLoading]);
 
   const captureImage = async () => {
@@ -124,7 +234,7 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
       // Add captured image
       const newImage: CapturedImage = {
         dataUrl,
-        position: currentStep
+        position: currentStep as 'center' | 'right' | 'left'
       };
 
       const updatedImages = [...capturedImages, newImage];
@@ -226,7 +336,7 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
         <p style={{ fontSize: '16px', color: '#666' }}>{getInstructionText()}</p>
       </div>
 
-      <div style={{ marginBottom: '20px', position: 'relative' }}>
+      <div style={{ marginBottom: '20px', position: 'relative', display: 'inline-block' }}>
         <video
           ref={videoRef}
           autoPlay
@@ -237,7 +347,22 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
             maxWidth: '400px',
             border: '2px solid #ddd',
             borderRadius: '8px',
-            transform: 'scaleX(-1)', // Mirror effect
+            // transform: 'scaleX(-1)', // Mirror effect
+            display: 'block'
+          }}
+        />
+        
+        <canvas
+          ref={overlayCanvasRef}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none',
+            // transform: 'scaleX(-1)', // Mirror effect to match video
+            borderRadius: '8px'
           }}
         />
         
