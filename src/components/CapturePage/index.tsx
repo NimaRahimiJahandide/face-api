@@ -279,56 +279,6 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
     setIsCapturing(false);
   };
 
-  // const updateFeedbackMessage = (
-  //   detection: any,
-  //   targetDirection: FaceDirection,
-  //   currentDirection: FaceDirection | null,
-  //   isCorrect: boolean,
-  //   isStable: boolean
-  // ) => {
-  //   if (!detection) {
-  //     setFeedbackMessage("Please position your face in the camera view");
-  //     setFeedbackType("instruction");
-  //     return;
-  //   }
-
-  //   if (isCorrect && isStable) {
-  //     setFeedbackMessage("Perfect! Capturing...");
-  //     setFeedbackType("success");
-  //   } else if (isCorrect && !isStable) {
-  //     setFeedbackMessage(`Good! Hold steady... (${stabilityCount}/12)`);
-  //     setFeedbackType("instruction");
-  //   } else {
-  //     // Give specific directional feedback
-  //     let message = "";
-  //     switch (targetDirection) {
-  //       case "front":
-  //         message = "Look straight at the camera";
-  //         break;
-  //       case "right":
-  //         message = "Turn your head to the right";
-  //         break;
-  //       case "left":
-  //         message = "Turn your head to the left";
-  //         break;
-  //     }
-
-  //     // Add current direction context for better guidance
-  //     if (currentDirection) {
-  //       if (targetDirection === "front" && currentDirection !== "front") {
-  //         message = "Turn back to face the camera directly";
-  //       } else if (targetDirection === "right" && currentDirection === "left") {
-  //         message = "Turn your head more to the right";
-  //       } else if (targetDirection === "left" && currentDirection === "right") {
-  //         message = "Turn your head more to the left";
-  //       }
-  //     }
-
-  //     setFeedbackMessage(message);
-  //     setFeedbackType("instruction");
-  //   }
-  // };
-
   const detectFaces = async () => {
     if (
       !videoRef.current ||
@@ -399,15 +349,6 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
         const isCorrectDirection = direction === targetDirection;
         const isStable = stableCount >= 9; // 9 out of 12 detections
 
-        // Update feedback message
-        // updateFeedbackMessage(
-        //   detection,
-        //   targetDirection,
-        //   direction,
-        //   isCorrectDirection,
-        //   isStable
-        // );
-
         // Auto-capture logic
         const now = Date.now();
         const timeSinceLastCapture = now - lastCaptureTimeRef.current;
@@ -452,7 +393,6 @@ const CapturePage: React.FC<Props> = ({ onComplete }) => {
         consecutiveDetectionsRef.current = [];
         setCurrentDirection(null);
         setStabilityCount(0);
-        // updateFeedbackMessage(null, targetDirection, null, false, false);
       }
 
       overlayCtx.restore();
