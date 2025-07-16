@@ -29,7 +29,7 @@ const PreviewPage: React.FC<Props> = ({ images, onNext }) => {
         className={styles.NextButton}
         type="button"
       >
-        Next
+        Finish
       </button>
     </div>
   );
