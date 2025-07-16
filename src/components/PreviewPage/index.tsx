@@ -1,18 +1,21 @@
 import styles from './styles.module.scss';
 import React from 'react';
-import type { CapturedImage } from '@/types';
 
 interface Props {
   images: CapturedImage[];
-  onNext: () => void;
+  onNext: NextHandler;
 }
 
 const PreviewPage: React.FC<Props> = ({ images, onNext }) => {
+  const handleNext = (): void => {
+    onNext();
+  };
+
   return (
     <div className={styles.PreviewContainer}>
       <h2 className={styles.Title}>Captured Images</h2>
       <div className={styles.ImagesGrid}>
-        {images.map((image, index) => (
+        {images.map((image: CapturedImage, index: number) => (
           <div key={index} className={styles.ImageWrapper}>
             <h3 className={styles.ImageTitle}>Position: {image.position}</h3>
             <img
@@ -25,7 +28,7 @@ const PreviewPage: React.FC<Props> = ({ images, onNext }) => {
       </div>
 
       <button
-        onClick={onNext}
+        onClick={handleNext}
         className={styles.NextButton}
         type="button"
       >

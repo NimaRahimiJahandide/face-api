@@ -2,10 +2,14 @@ import styles from './styles.module.scss';
 import React from 'react';
 
 interface Props {
-  onStart: () => void;
+  onStart: StartCaptureHandler;
 }
 
 const InstructionsPage: React.FC<Props> = ({ onStart }) => {
+  const handleStart = (): void => {
+    onStart();
+  };
+
   return (
     <div className={styles.InstructionsContainer}>
       <h1 className={styles.Title}>Face Capture Instructions</h1>
@@ -19,7 +23,7 @@ const InstructionsPage: React.FC<Props> = ({ onStart }) => {
         </ul>
       </div>
       <button
-        onClick={onStart}
+        onClick={handleStart}
         className={styles.StartButton}
         type="button"
       >
